@@ -1,9 +1,11 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using YamlDotNet.Serialization;
 
 namespace ImageReviewer
 {
@@ -17,8 +19,7 @@ namespace ImageReviewer
         private ILogger<MainWindow> _logger;
         private DataContext _dataContext;
         private IEnumerable<ImageData> _imageFiles;
-
-        private int _currentImageIndex = 0;
+        private int _currentDetectionIndex = 0;
 
         public MainWindow()
         {
@@ -33,21 +34,47 @@ namespace ImageReviewer
                 builder.AddDebug();
             });
 
-            _dataContext = new DataContext(_config, factory.CreateLogger<DataContext>());
-
             _logger = factory.CreateLogger<MainWindow>();
-            _imageFiles = _dataContext.DiscoverImages();
-            _currentImageIndex = 0;
 
             InitializeComponent();
         }
 
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
+
+            using ILoggerFactory factory = LoggerFactory.Create(builder =>
+            {
+                builder.AddConsole();
+                builder.AddDebug();
+            });
+            // deserialize from yaml into YoloData.cs
+            var yamlFile = _config["YoloYaml"]!;
+            var yaml = new DeserializerBuilder().Build();
+            var yoloData = yaml.Deserialize<YoloData>(File.ReadAllText(yamlFile));
+            yoloData.YoloConfigFilePath = yamlFile;
+
+            _dataContext = new DataContext(factory.CreateLogger<DataContext>(), yoloData);
+            _imageFiles = _dataContext.DiscoverImages();
+
             SetBackgroundByIndex();
             ResizeWindowToFitImage();
 
             _logger.LogInformation("Application loaded");
+        }
+
+        private int GetCurrentImageIndex()
+        {
+            var totalDetections = 0;
+            for (int i = 0; i < _imageFiles.Count(); i++)
+            {
+                totalDetections += _imageFiles.ElementAt(i).Detections.Count;
+                if (totalDetections > _currentDetectionIndex)
+                {
+                    return i;
+                }
+            }
+
+            return 0;
         }
 
         private void ResizeWindowToFitImage()
@@ -69,10 +96,10 @@ namespace ImageReviewer
             canvas.Children.Clear();
             // use the _currentImageIndex to load the image from the _imageFiles
             // and set it as the background of the canvas
-            var imageObj = _imageFiles.ElementAtOrDefault(_currentImageIndex);
+            var imageObj = _imageFiles.ElementAtOrDefault(GetCurrentImageIndex());
             if (imageObj == null)
             {
-                _logger.LogWarning("No image found at index {Index}", _currentImageIndex);
+                _logger.LogWarning("No image found at index {Index}", GetCurrentImageIndex());
                 return;
             }
 
@@ -88,34 +115,50 @@ namespace ImageReviewer
             };
             canvas.Children.Add(image);
 
-            lblStatus.Text = $"Image {_currentImageIndex + 1} of {_imageFiles.Count()}";
+            var imageCountData = $"Image {GetCurrentImageIndex() + 1} of {_imageFiles.Count()}.";
+            var detectionCountData = $"Detection {_currentDetectionIndex + 1} of {_imageFiles.Sum(img => img.Detections.Count)}";
+            var question = $"Is this an instance of {GetClassIdText()}?";
+
+            lblStatus.Text = $"{imageCountData} {detectionCountData} {question}";
+        }
+
+        private string GetClassIdText()
+        {
+            var classId = _imageFiles.SelectMany(img => img.Detections).ElementAt(_currentDetectionIndex).ClassId;
+            return _dataContext.ConvertClassIdToLabel(classId);
         }
 
         private void BtnPrevious_Click(object sender, RoutedEventArgs e)
         {
             _logger.LogInformation("User clicked Previous");
-            _currentImageIndex-= _currentImageIndex == 0 ? 0 : 1;
+            _currentDetectionIndex -= _currentDetectionIndex == 0 ? 0 : 1;
             SetBackgroundByIndex();
         }
 
         private void BtnYes_Click(object sender, RoutedEventArgs e)
         {
             _logger.LogInformation("User clicked Yes");
-            _currentImageIndex += _currentImageIndex == _imageFiles.Count() - 1 ? 0 : 1;
+            _currentDetectionIndex += _currentDetectionIndex == _imageFiles.Sum(image => image.Detections.Count) - 1 ? 0 : 1;
             SetBackgroundByIndex();
         }
 
         private void BtnNo_Click(object sender, RoutedEventArgs e)
         {
             _logger.LogInformation("User clicked No");
-            _currentImageIndex += _currentImageIndex == _imageFiles.Count() - 1 ? 0 : 1;
+            _currentDetectionIndex += _currentDetectionIndex == _imageFiles.Sum(image => image.Detections.Count) - 1 ? 0 : 1;
             SetBackgroundByIndex();
         }
 
-        private void ExitItem_Click(object sender, RoutedEventArgs e)
+        private void BtnNext_Click(object sender, RoutedEventArgs e)
         {
-            _logger.LogInformation("Exiting application");
-            Application.Current.Shutdown();
+            _logger.LogInformation("User clicked Next");
+            _currentDetectionIndex += _currentDetectionIndex == 0 ? 0 : 1;
+            SetBackgroundByIndex();
+        }
+
+        private void BtnSave_Click(object sender, RoutedEventArgs e)
+        {
+            _logger.LogInformation("Saving results");
         }
     }
 }

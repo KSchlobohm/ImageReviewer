@@ -12,8 +12,10 @@
 
         <StackPanel Orientation="Horizontal" VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="0,0,0,15">
             <Button Name="btnPrevious" Content="Previous" Width="100" Margin="10" Click="BtnPrevious_Click"/>
-            <Button Name="btnYes" Content="Yes" Width="100" Margin="10" Click="BtnYes_Click"/>
-            <Button Name="btnNo" Content="No" Width="100" Margin="10" Click="BtnNo_Click"/>
+            <Button Name="btnYes" Content="Y_es" Width="100" Margin="10" Click="BtnYes_Click" />
+            <Button Name="btnNo" Content="N_o" Width="100" Margin="10" Click="BtnNo_Click"/>
+            <Button Name="btnNext" Content="Next" Width="100" Margin="10" Click="BtnNext_Click"/>
+            <Button Name="btnSave" Content="Save" Width="100" Margin="10" Click="BtnSave_Click"/>
         </StackPanel>
         <TextBlock Name="lblStatus" Text="Loading..." HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="5"/>
 
