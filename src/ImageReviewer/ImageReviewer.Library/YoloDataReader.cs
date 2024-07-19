@@ -1,36 +1,36 @@
-﻿using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using System.IO;
-using System.Windows.Media.Imaging;
-using YamlDotNet.Serialization;
 
 namespace ImageReviewer
 {
-    public class DataContext
+    public class YoloDataReader : IYoloDataReader
     {
-        private ILogger<DataContext> _logger;
-        private YoloData _yoloData;
+        private ILogger _logger;
+        private YoloConfigManager _configManager;
 
-        public DataContext(ILogger<DataContext> logger, YoloData yoloData)
+        public YoloDataReader(ILogger<YoloDataReader> logger, YoloConfigManager configManager)
         {
             _logger = logger;
-            _yoloData = yoloData;
+            _configManager = configManager;
         }
 
-        public IEnumerable<ImageData> DiscoverImages()
+        public Result<IEnumerable<ImageData>> DiscoverYoloDetections()
         {
-            var pathToYaml = _yoloData.YoloConfigFilePath;
-            if (OperatingSystem.IsWindows())
+            if (_configManager is null || _configManager.Config is null)
             {
-                _yoloData.TrainFolder = _yoloData.TrainFolder.StartsWith('.') ? _yoloData.TrainFolder.Substring(2) : _yoloData.TrainFolder;
-                _yoloData.ValidationFolder = _yoloData.ValidationFolder.StartsWith('.') ? _yoloData.ValidationFolder.Substring(2) : _yoloData.ValidationFolder;
-
-                _yoloData.TrainFolder = _yoloData.TrainFolder.Replace("/", "\\");
-                _yoloData.ValidationFolder = _yoloData.ValidationFolder.Replace("/", "\\");
+                _logger.LogError("YoloDataReader: Yolo config was not available");
+                return Result<IEnumerable<ImageData>>.Failure("Yolo config was not available");
             }
 
-            var trainFolder = Path.Combine(Path.GetDirectoryName(pathToYaml)!, _yoloData.TrainFolder);
-            var validationFolder = Path.Combine(Path.GetDirectoryName(pathToYaml)!, _yoloData.ValidationFolder);
+            var pathToYaml = _configManager.YoloConfigFilePath;
+            if (string.IsNullOrEmpty(pathToYaml))
+            {
+                _logger.LogError("YoloDataReader: Yolo config file path was not available");
+                return Result<IEnumerable<ImageData>>.Failure("Yolo config file path was not available");
+            }
+
+            var trainFolder = Path.Combine(Path.GetDirectoryName(pathToYaml)!, _configManager.Config.TrainFolder);
+            var validationFolder = Path.Combine(Path.GetDirectoryName(pathToYaml)!, _configManager.Config.ValidationFolder);
 
             var folderPaths = new List<string> { trainFolder, validationFolder };
 
@@ -40,14 +40,16 @@ namespace ImageReviewer
             var imageFiles = jpgFiles.Concat(pngFiles);
             _logger.LogInformation($"Found {imageFiles.Count()} total images");
 
-            return imageFiles;
+            return Result<IEnumerable<ImageData>>.Success(imageFiles);
         }
 
         public string ConvertClassIdToLabel(int classId)
         {
-            if (_yoloData is not null && _yoloData.ClassNames.Length > classId)
+            if (_configManager?.Config?.ClassNames is not null
+                && 0 <= classId
+                && classId < _configManager.Config.ClassNames.Length)
             {
-                return _yoloData.ClassNames[classId];
+                return _configManager.Config.ClassNames[classId];
             }
 
             return classId.ToString();
@@ -87,7 +89,8 @@ namespace ImageReviewer
 
         private List<ObjectDetection> FindDetectionsForFile(string fileName)
         {
-            var image = new BitmapImage(new Uri(fileName));
+            //Use ImageSharp to load the image from fileName
+            var image = SixLabors.ImageSharp.Image.Load(fileName);
 
             // Assumes that the object detection data is stored in a file with the same name as the image
             // because that is how the Yolo training data is formatted

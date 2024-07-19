@@ -1,8 +1,8 @@
-﻿<Application x:Class="ImageReviewer.App"
+﻿<Application x:Class="ImageReviewerApp.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:ImageReviewer"
-             StartupUri="MainWindow.xaml">
+             Startup="OnStartup">
     <Application.Resources>
          
     </Application.Resources>
